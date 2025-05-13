@@ -6,3 +6,8 @@
 - ~~インデックス~~
 - 改行の保持
   - 難しい
+- string interpolation
+- unit test
+- 環境変数を参照する
+- read系(read -sr -p "input" input)
+- 配列
