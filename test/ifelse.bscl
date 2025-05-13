@@ -1,0 +1,19 @@
+var s1: str = "this is a pen";
+var s2: str = "this is an apple";
+if s1 == s2 {
+  echo("s1 equals to s2");
+} else {
+  echo("s1 does not equal to s2");
+}
+
+var i1: i64 = 120;
+var i2: i64 = 120;
+var i3: i64 = 1;
+
+if i1 == i2 {
+  echo("i1 equals to i2");
+}
+
+if i1!=i3 {
+  echo("i1 does not equals to i3");
+}

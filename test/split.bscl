@@ -1,0 +1,9 @@
+var s: str = "this
+is a
+pen";
+
+var array: array::<str> = [];
+split(array, s);
+for i in 0 to 2 {
+  echo(format("{}: {}", i, array[i]));
+}

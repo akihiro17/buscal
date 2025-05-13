@@ -1,0 +1,5 @@
+if execute(["false"]) {
+  echo("success");
+} else {
+  echo("fail");
+}

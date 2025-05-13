@@ -1,0 +1,14 @@
+var i1: i64 = 1 + 1;
+var i2: i64 = 10;
+
+if i1 < i2 {
+  echo("success");
+} else {
+  echo("fail");
+}
+
+if i2 > (100 - 80) {
+  echo("fail");
+} else {
+  echo("success");
+}

@@ -1,0 +1,10 @@
+fn clean_file(path: str) -> void {
+  var before: str = capture(["grep", "-c", "^", path]);
+  echo(format("The file {} starts with {}", path, before));
+
+  execute(["sed", unquoted_str("'\\/^\\s*#\/d;\/^$/d'"), path]);
+}
+
+var file_name: str = "test/remove_comments.input";
+clean_file(file_name);
+

@@ -1,0 +1,11 @@
+var i1: i64 = 1;
+var i2: i64 = 1;
+var i3: i64 = 0;
+i3 = i1 + i2 + 10;
+echo(i3);
+
+var s1: str = "this ";
+var s2: str = "is";
+var s3: str = " a pen";
+s3 = s1 + s2 + s3 + ".";
+echo(s3);

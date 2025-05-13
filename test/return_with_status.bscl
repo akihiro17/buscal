@@ -1,0 +1,10 @@
+fn f1(s: str) -> str {
+  if s == "10" {
+    return s + ";";
+  }
+
+  fail(s+";");
+}
+
+var output: str = f1("10");
+echo(output);

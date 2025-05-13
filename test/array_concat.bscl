@@ -1,0 +1,12 @@
+var s1: str = ".";
+var s2: str = "is a pen";
+var a2: array::<str> = ["this", s2, s1];
+var a3: array::<str> = a2;
+a3 = a2;
+
+var a4: array::<str> = ["this", "is", "an apple", ";"];
+a4 = a3 + a4;
+
+for i in 0 to len(a4)-1 {
+  echo(a4[i]);
+}

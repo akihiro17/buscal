@@ -1,0 +1,7 @@
+# コマンド実行
+var cmd: array::<str> = ["ls", "-la"];
+if execute(cmd) {
+    echo("ディレクトリ一覧を表示しました");
+} else {
+    echo("コマンドの実行に失敗しました");
+}

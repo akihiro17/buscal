@@ -1,0 +1,18 @@
+fn clean_file(path: str) -> void {
+  if !is_file(path) {
+    echo(format("{} does not seem to be a file", path));
+    exit(2);
+  }
+
+  var before: str = capture(["wc", "-l", path]);
+  echo(format("The file {} starts with {}", path, before));
+
+  execute(["sed", "-i.bak", unquoted_str("'\\/^\\s*#\/d;\/^$\/d'"), path]);
+
+  var after: str = capture(["wc", "-l", path]);
+  echo(format("The file {} is now {}", path, after));
+}
+
+var file_name: str = "";
+read("Enter a file to clean: ", ref file_name);
+clean_file(file_name);

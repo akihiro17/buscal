@@ -1,0 +1,4 @@
+var s1: str = "ペン";
+var s2: str = format("{this} }{is a {{}} {}", s1);
+var s3: str = "( " + s2 + " )";
+echo(s3);

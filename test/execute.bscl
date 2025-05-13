@@ -1,0 +1,13 @@
+var path: str = "date";
+var date: array::<str> = [];
+
+var os: str = capture(["uname"]);
+if os == "Darwin" {
+  date = [path, "-j", "-f", "%Y-%m-%d", "2025-05-18", "+%Y-%m-%d"];
+} else {
+  # Linux
+  var opt: str = "+%Y-%m-%d";
+  date = [path, opt, "-d", "2025-05-18"];
+}
+
+if execute(date) { echo("success"); }
