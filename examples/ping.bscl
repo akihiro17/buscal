@@ -1,0 +1,4 @@
+var server_addr: str = "";
+execute(["read", "-r", "-p", "Which server should be pinged ", ref server_addr]);
+execute(["ping", "-c3", server_addr, "2>&1", ">", "/dev/null"]) || execute(["echo", "Server Dead"]);
+

@@ -1,0 +1,37 @@
+var usage: str = "使用法 : search.sh < ファイル > < 検索文字列 > < 操作 >";
+
+if number_of_args() != 3 {
+  echo(usage);
+  exit(2);
+}
+
+if is_file(args(1)) {
+  execute(["true"]);
+} else {
+  exit(3);
+}
+
+var mesg: str = "";
+var opt: str = "";
+case args(3) in {
+  `[cC]` => {
+    mesg = format("{}の中で{}にマッチする行数を数えます", args(1), args(2));
+    opt = "-c";
+  },
+  `[pP]` => {
+    mesg = format("{}の中で{}にマッチする行を表示します", args(1), args(2));
+    opt = "";
+  },
+  `[dD]` => {
+    mesg = format("{}の中で{}にマッチする行を除いて表示します", args(1), args(2));
+    opt = "-v";
+  },
+  `*` => {
+    echo(format("{} {} {}を評価できません", args(1), args(2), args(3)));
+    exit(1);
+  }
+}
+
+echo(mesg);
+execute(["grep", opt, args(2), args(1)]);
+exit(0);

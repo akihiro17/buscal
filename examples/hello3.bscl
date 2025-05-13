@@ -1,0 +1,7 @@
+var name: str = "";
+var cmd: array::<str> = ["read", "-r", "-p", "May I ask your name: ", name];
+if execute(cmd) {
+  echo(format("Hello {}", name));
+} else {
+  echo("fail");
+}

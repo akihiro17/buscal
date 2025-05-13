@@ -1,0 +1,46 @@
+var tests: array::<str> = [
+  "orange",
+  "apple",
+  "banana",
+  "?AT",
+  "*day",
+  "cAT",
+  "sunday",
+  "Cat",
+  "test",
+  "1st: その他",
+];
+
+var pattern1: pattern = `*day`;
+
+for i in 0 to len(tests) - 1 {
+  var t: str = tests[i];
+
+  case t in {
+    `orange` => {
+      echo("orangeという文字列");
+    },
+    `apple | banana` => {
+      echo("appleまたはbananaという文字列");
+    },
+    `"?AT" | "*day"` => {
+      echo("?ATまたは*dayという文字列");
+    },
+    `?AT` => {
+      echo("任意の1文字の後にATが続く文字列");
+    },
+    pattern1 => {
+      echo("末尾がdayで終わる文字列");
+    }
+    `[A-Z]*` => {
+      echo("先頭がアルファベットの大文字で始まる文字列");
+    },
+    `[!0-9]*` => {
+      echo("先頭が数字以外で始まる文字列");
+    },
+    `*` => {
+      echo("other");
+    },
+  }
+}
+

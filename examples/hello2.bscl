@@ -1,0 +1,4 @@
+var names: array::<str> = expanded_args();
+for i in 0 to len(ref names) - 1 {
+  echo(format("hello {}", names[i]));
+}

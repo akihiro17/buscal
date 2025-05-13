@@ -1,0 +1,15 @@
+var a1: array::<i64> = [1, 2, 3];
+a1 = [1,2,3];
+var s1: str = ".";
+var s2: str = "is a pen";
+var a2: array::<str> = ["this", s2, s1];
+var a3: array::<str> = a2;
+a3 = a2;
+
+for i in 0 to len(a3) - 1 {
+  echo("(" + a3[i] + ")");
+}
+
+for i in 0 to len(a1)-1 {
+  echo(a1[i] + 1);
+}

@@ -1,0 +1,15 @@
+fn to_lower(input: str) -> str {
+  var output: str = capture(["echo", input, "|", "tr", "[A-Z]", "[a-z]"]);
+  return output;
+}
+
+loop {
+  var i: str = "";
+  execute(["read", "-p", "Enter c to continue or q to exit: ", ref i]);
+  i = to_lower(i);
+  if i == "q" {
+    break;
+  }
+}
+
+echo("Finished");

@@ -1,0 +1,13 @@
+fn return_array() -> array::<str> {
+  var a1: array::<str> = ["this", "is a ", "pen"];
+  return a1;
+}
+
+var res: array::<str> = return_array();
+var a1: array::<str> = ["a1", "a2"];
+a1 = res;
+for i in 0 to len(a1) - 1 {
+  if a1[i] == res[i] {
+    echo("success");
+  }
+}

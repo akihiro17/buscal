@@ -1,0 +1,11 @@
+fn f1() -> array::<str> {
+  return ["this is ", "a pen", ";"];
+}
+
+var arr: array::<str> = f1();
+var sep: str = "<-->";
+var s: str = join(arr, sep);
+echo(s);
+
+var s2: str = substr(s, strlen(sep));
+echo(s2);

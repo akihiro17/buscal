@@ -1,0 +1,8 @@
+# ref. https://github.com/oreilly-japan/mastering-linux-shell-scripting-2e-ja/blob/c1d6b1a17e169603a146a9fc88ee3d6396b1f481/ch03/hello5.sh
+if number_of_args() < 1 {
+  echo(format("Usage: {} <name>", args(0)));
+  exit(1);
+}
+
+echo(format("Hello {}", args(1)));
+exit(0);
