@@ -1,0 +1,8 @@
+var i: i64 = 123;
+var s: str = "Hello world";
+
+fn add_ints(a: str) -> i64 {
+  return a;
+}
+
+var res: i64 = add_ints(12);
