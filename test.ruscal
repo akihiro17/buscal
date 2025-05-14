@@ -9,4 +9,13 @@ echo(res);
 echo("true");
 var now: str = capture("date");
 echo(now);
-if echo(res) { echo("\"true\" cond"); };
+if echo(res) { echo("\"true\" cond"); }
+
+var s: str = "pen";
+var st: str = format("{this} }{is a {{}} {}", s);
+var s3: str = st + "debug";
+echo(st);
+echo(s3);
+
+var t: str = "a" + "b" + "c";
+echo(t);

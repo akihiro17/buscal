@@ -1,5 +1,10 @@
 use core::panic;
-use std::{collections::HashMap, ffi::FromBytesUntilNulError, io::Read, sync::WaitTimeoutResult};
+use std::{
+    collections::{HashMap, VecDeque},
+    ffi::FromBytesUntilNulError,
+    io::Read,
+    sync::WaitTimeoutResult,
+};
 
 use nom::{
     branch::alt,
@@ -33,6 +38,7 @@ enum Value {
 
 struct Info {
     string: String,
+    raw_string: String,
     value: Value,
 }
 
@@ -175,6 +181,14 @@ fn standard_functions<'src>() -> Functions<'src> {
             ret_type: TypeDecl::Str,
         }),
     );
+    funcs.insert(
+        "format".to_string(),
+        FnDef::Native(NativeFn {
+            args: vec![("arg", TypeDecl::Str)],
+            ret_type: TypeDecl::Str,
+        }),
+    );
+
     funcs
 }
 
@@ -444,12 +458,7 @@ fn eval_stmts<'src>(
                 }
                 let result = convert(expr, frame);
                 frame.vars.insert((*name).to_string(), result.value);
-                lines.push(format!(
-                    "{}{}=\"{}\"",
-                    depth_space(depth),
-                    name,
-                    result.string
-                ));
+                lines.push(format!("{}{}={}", depth_space(depth), name, result.string));
             }
             Statement::FnDef {
                 name,
@@ -537,6 +546,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
             if let Some(v) = frame.vars.get(*id) {
                 return Info {
                     string: format!("${{{}}}", *id),
+                    raw_string: format!("${{{}}}", *id),
                     value: v.clone(),
                 };
             }
@@ -548,6 +558,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                         if let Some(v) = s.vars.get(*id) {
                             return Info {
                                 string: format!("${{{}}}", *id),
+                                raw_string: format!("${{{}}}", *id),
                                 value: v.clone(),
                             };
                         }
@@ -558,10 +569,12 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
         }
         NumLiteral(n) => Info {
             string: n.to_string(),
+            raw_string: n.to_string(),
             value: Value::I64,
         },
         StrLiteral(str) => Info {
             string: format!("\"{}\"", str),
+            raw_string: str.to_string(),
             value: Value::Str,
         },
         FnInvoke(name, args) => {
@@ -586,7 +599,8 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                             }
                         };
                         Info {
-                            string: str,
+                            string: str.clone(),
+                            raw_string: str,
                             value: Value::I64,
                         }
                     }
@@ -600,9 +614,10 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                                 .map(|v| v.string.clone())
                                 .collect::<Vec<String>>()
                                 .join(" ");
-                            let str = format!("{} {}", name, test);
+                            let str = format!("{} \"{}\"", name, test);
                             Info {
-                                string: str,
+                                string: str.clone(),
+                                raw_string: str,
                                 value: Value::ExitStatus,
                             }
                         }
@@ -618,7 +633,8 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
 
                             let str = format!("$({})", test);
                             Info {
-                                string: str,
+                                string: str.clone(),
+                                raw_string: str,
                                 value: Value::Str,
                             }
                         }
@@ -634,7 +650,8 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
 
                             let str = format!("{}", test);
                             Info {
-                                string: str,
+                                string: str.clone(),
+                                raw_string: str,
                                 value: Value::Str,
                             }
                         }
@@ -650,7 +667,64 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
 
                             let str = format!("${}", i.string);
                             Info {
-                                string: str,
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::Str,
+                            }
+                        }
+                        "format" => {
+                            // TODO: "{{}"のようなものを弾く
+                            let mut new_args: VecDeque<Info> =
+                                args.iter().map(|arg| convert(arg, frame)).collect();
+
+                            let template = new_args.pop_front().unwrap();
+
+                            let mut chars = template.raw_string.chars().peekable();
+                            let mut result = String::new();
+
+                            while let Some(ch) = chars.next() {
+                                if ch == '{' {
+                                    match chars.peek() {
+                                        Some('{') => {
+                                            chars.next(); // consume second '{'
+                                            if let Some('}') = chars.next() {
+                                                if let Some('}') = chars.next() {
+                                                    // Handle `{{}}` → "{}"
+                                                    result.push_str("{}");
+                                                } else {
+                                                    // Unmatched braces like `{{}`
+                                                    result.push_str("{");
+                                                    result.push_str("}");
+                                                }
+                                            } else {
+                                                // Just `{{` without closing
+                                                result.push_str("{");
+                                            }
+                                        }
+                                        Some('}') => {
+                                            chars.next(); // consume '}'
+                                            match new_args.pop_front() {
+                                                Some(v) => {
+                                                    result.push_str(&v.raw_string);
+                                                }
+                                                None => {
+                                                    panic!("not values");
+                                                }
+                                            }
+                                        }
+                                        _ => {
+                                            result.push('{');
+                                        }
+                                    }
+                                } else {
+                                    result.push(ch);
+                                }
+                            }
+
+                            let return_value = result;
+                            Info {
+                                string: format!("\"{}\"", return_value.clone()),
+                                raw_string: return_value,
                                 value: Value::Str,
                             }
                         }
@@ -669,10 +743,12 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
             match (left.value, right.value) {
                 (Value::I64, Value::I64) => Info {
                     string: format!("$(({} + {}))", left.string, right.string),
+                    raw_string: format!("$(({} + {}))", left.string, right.string),
                     value: Value::I64,
                 },
                 (Value::Str, Value::Str) => Info {
-                    string: format!("{}{}", left.string, right.string),
+                    string: format!("\"{}{}\"", left.raw_string, right.raw_string),
+                    raw_string: format!("{}{}", left.raw_string, right.raw_string),
                     value: Value::Str,
                 },
                 _ => {
@@ -903,6 +979,7 @@ where
 
 fn str_literal(i: &str) -> IResult<&str, Expression> {
     let (r, val) = parse_string(i)?;
+    println!("val: {}", val);
     Ok((r, Expression::StrLiteral(val)))
 }
 
