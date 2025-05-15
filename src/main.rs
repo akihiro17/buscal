@@ -31,6 +31,7 @@ mod types;
 enum Value {
     I64,
     Str,
+    Command,
     Ident,
     ExitStatus,
     None,
@@ -116,6 +117,7 @@ pub enum TypeDecl {
     I64,
     Str,
     ExitStatus,
+    Command,
 }
 
 fn tc_coerce_type<'src>(value: &TypeDecl, target: &TypeDecl) -> Result<TypeDecl, TypeCheckError> {
@@ -186,6 +188,13 @@ fn standard_functions<'src>() -> Functions<'src> {
         FnDef::Native(NativeFn {
             args: vec![("arg", TypeDecl::Str)],
             ret_type: TypeDecl::Str,
+        }),
+    );
+    funcs.insert(
+        "format_cmd".to_string(),
+        FnDef::Native(NativeFn {
+            args: vec![("arg", TypeDecl::Str)],
+            ret_type: TypeDecl::Command,
         }),
     );
 
@@ -271,6 +280,7 @@ fn tc_expr<'src>(
     Ok(match &e {
         NumLiteral(_val) => TypeDecl::I64,
         StrLiteral(_val) => TypeDecl::Str,
+        Command(_val) => TypeDecl::Command,
         Ident(str) => {
             if let Some(val) = ctx.get_var(str) {
                 return Ok(val);
@@ -404,6 +414,7 @@ enum Expression<'src> {
     Ident(&'src str),
     NumLiteral(i64),
     StrLiteral(String),
+    Command(String),
     FnInvoke(&'src str, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -508,7 +519,7 @@ fn eval_stmts<'src>(
             }
             Statement::Return(expr) => {
                 let result = convert(expr, frame);
-                lines.push(format!("{}echo \"{}\"", depth_space(depth), result.string));
+                lines.push(format!("{}echo {}", depth_space(depth), result.string));
             }
             Statement::If(cond, t_case, f_case) => {
                 let cond_exp = convert(cond, frame);
@@ -545,7 +556,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
         Ident(id) => {
             if let Some(v) = frame.vars.get(*id) {
                 return Info {
-                    string: format!("${{{}}}", *id),
+                    string: format!("\"${{{}}}\"", *id),
                     raw_string: format!("${{{}}}", *id),
                     value: v.clone(),
                 };
@@ -557,7 +568,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                     Some(s) => {
                         if let Some(v) = s.vars.get(*id) {
                             return Info {
-                                string: format!("${{{}}}", *id),
+                                string: format!("\"${{{}}}\"", *id),
                                 raw_string: format!("${{{}}}", *id),
                                 value: v.clone(),
                             };
@@ -572,10 +583,18 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
             raw_string: n.to_string(),
             value: Value::I64,
         },
-        StrLiteral(str) => Info {
-            string: format!("\"{}\"", str),
+        StrLiteral(str) => {
+            let str = str.replace("\"", "\\\"");
+            Info {
+                string: format!("\"{}\"", str),
+                raw_string: str.to_string(),
+                value: Value::Str,
+            }
+        }
+        Command(str) => Info {
+            string: format!("{}", str),
             raw_string: str.to_string(),
-            value: Value::Str,
+            value: Value::Command,
         },
         FnInvoke(name, args) => {
             if let Some(func) = frame.get_fn(*name) {
@@ -614,7 +633,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                                 .map(|v| v.string.clone())
                                 .collect::<Vec<String>>()
                                 .join(" ");
-                            let str = format!("{} \"{}\"", name, test);
+                            let str = format!("{} {}", name, test);
                             Info {
                                 string: str.clone(),
                                 raw_string: str,
@@ -622,7 +641,7 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                             }
                         }
                         "capture" => {
-                            let new_args: Vec<Info> =
+                            let mut new_args: VecDeque<Info> =
                                 args.iter().map(|arg| convert(arg, frame)).collect();
 
                             let test = new_args
@@ -642,11 +661,18 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                             let new_args: Vec<Info> =
                                 args.iter().map(|arg| convert(arg, frame)).collect();
 
-                            let test = new_args
+                            let mut test = new_args
                                 .iter()
                                 .map(|v| v.string.clone())
                                 .collect::<Vec<String>>()
                                 .join(" ");
+
+                            println!("test: {}", test);
+                            test.remove(test.len() - 1);
+                            if !test.is_empty() {
+                                test.remove(0);
+                            }
+                            println!("test: {}", test);
 
                             let str = format!("{}", test);
                             Info {
@@ -674,58 +700,20 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
                         }
                         "format" => {
                             // TODO: "{{}"のようなものを弾く
-                            let mut new_args: VecDeque<Info> =
-                                args.iter().map(|arg| convert(arg, frame)).collect();
-
-                            let template = new_args.pop_front().unwrap();
-
-                            let mut chars = template.raw_string.chars().peekable();
-                            let mut result = String::new();
-
-                            while let Some(ch) = chars.next() {
-                                if ch == '{' {
-                                    match chars.peek() {
-                                        Some('{') => {
-                                            chars.next(); // consume second '{'
-                                            if let Some('}') = chars.next() {
-                                                if let Some('}') = chars.next() {
-                                                    // Handle `{{}}` → "{}"
-                                                    result.push_str("{}");
-                                                } else {
-                                                    // Unmatched braces like `{{}`
-                                                    result.push_str("{");
-                                                    result.push_str("}");
-                                                }
-                                            } else {
-                                                // Just `{{` without closing
-                                                result.push_str("{");
-                                            }
-                                        }
-                                        Some('}') => {
-                                            chars.next(); // consume '}'
-                                            match new_args.pop_front() {
-                                                Some(v) => {
-                                                    result.push_str(&v.raw_string);
-                                                }
-                                                None => {
-                                                    panic!("not values");
-                                                }
-                                            }
-                                        }
-                                        _ => {
-                                            result.push('{');
-                                        }
-                                    }
-                                } else {
-                                    result.push(ch);
-                                }
-                            }
-
-                            let return_value = result;
+                            let ret = parse_format_string(args, frame, true);
                             Info {
-                                string: format!("\"{}\"", return_value.clone()),
-                                raw_string: return_value,
+                                string: format!("\"{}\"", ret.clone()),
+                                raw_string: ret,
                                 value: Value::Str,
+                            }
+                        }
+                        "format_cmd" => {
+                            // TODO: "{{}"のようなものを弾く
+                            let ret = parse_format_string(args, frame, false);
+                            Info {
+                                string: format!("{}", ret.clone()),
+                                raw_string: ret,
+                                value: Value::Command,
                             }
                         }
                         _ => {
@@ -760,6 +748,60 @@ fn convert<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
             panic!("expr not implemented")
         }
     }
+}
+
+fn parse_format_string(args: &Vec<Expression>, frame: &mut StackFrame, raw: bool) -> String {
+    let mut new_args: VecDeque<Info> = args.iter().map(|arg| convert(arg, frame)).collect();
+
+    let template = new_args.pop_front().unwrap();
+
+    let mut chars = template.raw_string.chars().peekable();
+    let mut result = String::new();
+
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            match chars.peek() {
+                Some('{') => {
+                    chars.next(); // consume second '{'
+                    if let Some('}') = chars.next() {
+                        if let Some('}') = chars.next() {
+                            // Handle `{{}}` → "{}"
+                            result.push_str("{}");
+                        } else {
+                            // Unmatched braces like `{{}`
+                            result.push_str("{");
+                            result.push_str("}");
+                        }
+                    } else {
+                        // Just `{{` without closing
+                        result.push_str("{");
+                    }
+                }
+                Some('}') => {
+                    chars.next(); // consume '}'
+                    match new_args.pop_front() {
+                        Some(v) => {
+                            if raw {
+                                result.push_str(&v.raw_string);
+                            } else {
+                                result.push_str(&v.string);
+                            }
+                        }
+                        None => {
+                            panic!("not values");
+                        }
+                    }
+                }
+                _ => {
+                    result.push('{');
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
 }
 
 fn statement(i: &str) -> IResult<&str, Statement> {
