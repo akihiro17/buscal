@@ -14,12 +14,23 @@ pub fn type_check<'src>(
         match stmt {
             Statement::VarDef(var, type_, init_expr) => {
                 let init_type = tc_expr(init_expr, ctx)?;
+                if let TypeDecl::Command = init_type {
+                    return Err(TypeCheckError::new(format!(
+                        "{:?} cannot be assigned to var",
+                        init_type
+                    )));
+                }
                 let init_type = tc_coerce_type(&init_type, type_)?;
-                println!("var def: {:?}", *var);
                 ctx.vars.insert(*var, init_type);
             }
             Statement::VarAssign(var, expr) => {
                 let init_type = tc_expr(expr, ctx)?;
+                if let TypeDecl::Command = init_type {
+                    return Err(TypeCheckError::new(format!(
+                        "{:?} cannot be assigned to var",
+                        init_type
+                    )));
+                }
                 let var = ctx.vars.get(*var).expect("[VarAssign]Variable not found");
                 tc_coerce_type(&init_type, var)?;
             }
@@ -130,6 +141,8 @@ fn tc_coerce_type<'src>(value: &TypeDecl, target: &TypeDecl) -> Result<TypeDecl,
         (Any, _) => target.clone(),
         (I64, I64) => I64,
         (Str, Str) => Str,
+        (Command, Command) => Command,
+        (ExitStatus, ExitStatus) => ExitStatus,
         _ => {
             return Err(TypeCheckError::new(format!(
                 "{:?} cannot be assigned to {:?}",

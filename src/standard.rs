@@ -15,14 +15,14 @@ pub fn functions<'src>() -> Functions<'src> {
     funcs.insert(
         "capture".to_string(),
         FnDef::Native(NativeFn {
-            args: vec![("arg", TypeDecl::Str)],
+            args: vec![("arg", TypeDecl::Command)],
             ret_type: TypeDecl::Str,
         }),
     );
     funcs.insert(
-        "command".to_string(),
+        "execute".to_string(),
         FnDef::Native(NativeFn {
-            args: vec![("arg", TypeDecl::Str)],
+            args: vec![("arg", TypeDecl::Command)],
             ret_type: TypeDecl::ExitStatus,
         }),
     );
@@ -38,6 +38,13 @@ pub fn functions<'src>() -> Functions<'src> {
         FnDef::Native(NativeFn {
             args: vec![("arg", TypeDecl::Str)],
             ret_type: TypeDecl::Str,
+        }),
+    );
+    funcs.insert(
+        "command".to_string(),
+        FnDef::Native(NativeFn {
+            args: vec![("arg", TypeDecl::Str)],
+            ret_type: TypeDecl::Command,
         }),
     );
 

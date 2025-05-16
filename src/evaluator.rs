@@ -269,7 +269,7 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                                 value: Value::Str,
                             }
                         }
-                        "command" => {
+                        "execute" => {
                             let new_args: Vec<Info> =
                                 args.iter().map(|arg| eval_expression(arg, frame)).collect();
 
@@ -319,8 +319,26 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                                 value: Value::Str,
                             }
                         }
+                        "command" => {
+                            let new_args: VecDeque<Info> =
+                                args.iter().map(|arg| eval_expression(arg, frame)).collect();
+
+                            let test = new_args
+                                .iter()
+                                .map(|v| v.string.clone())
+                                .collect::<Vec<String>>()
+                                .join(" ");
+
+                            let str = format!("{}", test);
+                            Info {
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::Str,
+                            }
+                        }
+
                         _ => {
-                            panic!("not implemented")
+                            panic!("native function {} not implemented", name);
                         }
                     },
                 }

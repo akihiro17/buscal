@@ -31,6 +31,7 @@ pub enum TypeDecl {
     I64,
     Str,
     ExitStatus,
+    Command,
 }
 
 pub enum FnDef<'src> {

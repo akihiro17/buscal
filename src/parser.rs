@@ -113,6 +113,7 @@ fn type_decl(i: &str) -> IResult<&str, TypeDecl> {
         match td {
             "i64" => TypeDecl::I64,
             "str" => TypeDecl::Str,
+            "command" => TypeDecl::Command,
             _ => {
                 panic!("Type annotation has unknown type: {td}")
             }
