@@ -4,10 +4,7 @@ use nom::{
         complete::{tag, take_until},
         streaming::{is_not, take_while_m_n},
     },
-    character::complete::{
-        alpha1, alphanumeric1, char, line_ending, multispace0, multispace1, none_of,
-        not_line_ending, space0,
-    },
+    character::complete::{alpha1, alphanumeric1, char, multispace0, multispace1},
     combinator::{map, map_opt, map_res, opt, recognize, value, verify},
     error::{FromExternalError, ParseError},
     multi::{fold_many0, many0, separated_list0},
@@ -16,7 +13,7 @@ use nom::{
     Finish, IResult, Parser,
 };
 
-use crate::{Expression, Statement, Statements, TypeDecl};
+use crate::types::{Expression, Statement, Statements, TypeDecl};
 
 // Statement
 pub fn statements_finish(i: &str) -> Result<Statements, nom::error::Error<&str>> {

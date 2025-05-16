@@ -25,8 +25,6 @@ pub enum Statement<'src> {
     If(Expression<'src>, Statements<'src>, Option<Statements<'src>>),
 }
 
-pub type Statements<'a> = Vec<Statement<'a>>;
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TypeDecl {
     Any,
@@ -34,3 +32,37 @@ pub enum TypeDecl {
     Str,
     ExitStatus,
 }
+
+pub enum FnDef<'src> {
+    User(UserFn<'src>),
+    Native(NativeFn<'src>),
+}
+
+impl<'src> FnDef<'src> {
+    pub fn args(&self) -> Vec<(&'src str, TypeDecl)> {
+        match self {
+            Self::User(user) => user.args.clone(),
+            Self::Native(native) => return native.args.clone(),
+        }
+    }
+
+    pub fn ret_type(&self) -> TypeDecl {
+        match self {
+            Self::User(user) => user.ret_type,
+            Self::Native(native) => native.ret_type,
+        }
+    }
+}
+
+pub struct UserFn<'src> {
+    pub args: Vec<(&'src str, TypeDecl)>,
+    pub ret_type: TypeDecl,
+    pub stmts: Statements<'src>,
+}
+
+pub struct NativeFn<'src> {
+    pub args: Vec<(&'src str, TypeDecl)>,
+    pub ret_type: TypeDecl,
+}
+
+pub type Statements<'a> = Vec<Statement<'a>>;
