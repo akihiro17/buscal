@@ -1,0 +1,8 @@
+var a: i64 = 100;
+var b: str = "abcd efg";
+
+fn add(a: i64, b: i64) -> i64{
+  return a + b;
+}
+var res: i64 = add(1,3);
+echo(res);

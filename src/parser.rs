@@ -341,7 +341,6 @@ where
 
 fn str_literal(i: &str) -> IResult<&str, Expression> {
     let (r, val) = parse_string(i)?;
-    println!("val: {}", val);
     Ok((r, Expression::StrLiteral(val)))
 }
 

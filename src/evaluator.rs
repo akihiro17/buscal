@@ -147,7 +147,6 @@ pub fn eval_stmts<'src>(
                     depth_space(depth),
                     cond_exp.string
                 ));
-                println!("t_case: {:?}", t_case);
                 eval_stmts(t_case, &mut new_frame, &mut new_lines, depth + 1);
                 for line in new_lines {
                     lines.push(line);
@@ -160,10 +159,6 @@ pub fn eval_stmts<'src>(
                 panic!("not impletemented")
             }
         }
-    }
-
-    for line in lines {
-        println!("{}", line);
     }
 }
 
@@ -275,16 +270,9 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
 
                             let mut test = new_args
                                 .iter()
-                                .map(|v| v.string.clone())
+                                .map(|v| v.raw_string.clone())
                                 .collect::<Vec<String>>()
                                 .join(" ");
-
-                            println!("test: {}", test);
-                            test.remove(test.len() - 1);
-                            if !test.is_empty() {
-                                test.remove(0);
-                            }
-                            println!("test: {}", test);
 
                             let str = format!("{}", test);
                             Info {
@@ -325,7 +313,7 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
 
                             let test = new_args
                                 .iter()
-                                .map(|v| v.string.clone())
+                                .map(|v| v.raw_string.clone())
                                 .collect::<Vec<String>>()
                                 .join(" ");
 

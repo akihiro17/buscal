@@ -1,0 +1,4 @@
+var path: str = "date";
+var opt: str = "+%Y-%m-%d";
+if execute(command(path, opt, "-d 2025-05-18", ">/dev/null")) { echo("success"); }
+

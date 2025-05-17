@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use log::info;
+
 use crate::{
     standard::functions,
     types::{Expression, FnDef, Statement, TypeDecl, UserFn},
@@ -52,9 +54,6 @@ pub fn type_check<'src>(
                 let mut subctx = Context::push_stack(ctx);
                 for (arg, ty) in args.iter() {
                     subctx.vars.insert(arg, *ty);
-                }
-                for (name, decl) in subctx.vars.iter() {
-                    println!("{:?} : {:?}", name, decl);
                 }
                 let last_stmt = type_check(stmts, &mut subctx)?;
                 tc_coerce_type(&last_stmt, &ret_type)?;

@@ -1,0 +1,4 @@
+var path: str = "date";
+var opt: str = "+%Y-%m-%d";
+var res: str = capture(command(path, opt, "-d 2025-05-18"));
+echo(res);

@@ -7,7 +7,11 @@ mod standard;
 mod type_checker;
 mod types;
 
+use log::{error, info};
+
 fn main() {
+    env_logger::init();
+
     let mut buf = String::new();
     if !std::io::stdin().read_to_string(&mut buf).is_ok() {
         panic!("Failed to read from stdin");
@@ -15,7 +19,7 @@ fn main() {
     let parsed_statements = match parser::statements_finish(&buf) {
         Ok(parsed_statements) => parsed_statements,
         Err(e) => {
-            eprintln!("Parse error: {e:?}");
+            error!("Parse error: {e:?}");
             return;
         }
     };
@@ -26,10 +30,14 @@ fn main() {
         println!("Type check error: {err}");
         return;
     }
-    println!("Type check OK");
+    info!("Type check OK");
 
     let mut frame = evaluator::StackFrame::new();
     let mut lines = vec![];
     lines.push("#!/usr/bin/env bash".to_string());
     evaluator::eval_stmts(&parsed_statements, &mut frame, &mut lines, 0);
+
+    for line in lines {
+        println!("{}", line);
+    }
 }
