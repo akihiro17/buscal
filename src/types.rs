@@ -10,6 +10,7 @@ pub enum Expression<'src> {
     Div(Box<Expression<'src>>, Box<Expression<'src>>),
     Eq(Box<Expression<'src>>, Box<Expression<'src>>),
     NotEq(Box<Expression<'src>>, Box<Expression<'src>>),
+    And(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

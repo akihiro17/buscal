@@ -133,11 +133,12 @@ fn expr(i: &str) -> IResult<&str, Expression> {
     let (i, init) = term(i)?;
 
     fold_many0(
-        pair(space_delimited(alt((char('+'), char('-')))), term),
+        pair(space_delimited(alt((tag("+"), tag("-"), tag("&&")))), term),
         move || init.clone(),
-        |acc, (op, val): (char, Expression)| match op {
-            '+' => Expression::Add(Box::new(acc), Box::new(val)),
-            '-' => Expression::Sub(Box::new(acc), Box::new(val)),
+        |acc, (op, val): (&str, Expression)| match op {
+            "+" => Expression::Add(Box::new(acc), Box::new(val)),
+            "-" => Expression::Sub(Box::new(acc), Box::new(val)),
+            "&&" => Expression::And(Box::new(acc), Box::new(val)),
             _ => {
                 panic!("Additive expression should have '+' or '-' operator")
             }

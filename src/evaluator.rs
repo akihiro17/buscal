@@ -286,7 +286,7 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                             Info {
                                 string: str.clone(),
                                 raw_string: str,
-                                value: Value::Str,
+                                value: Value::ExitStatus,
                             }
                         }
                         "args" => {
@@ -392,6 +392,20 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                 (Value::Str, Value::Str) => Info {
                     string: format!("[ {} != {} ]", left.string, right.string),
                     raw_string: format!("[ {} != {} ]", left.string, right.string),
+                    value: Value::ExitStatus,
+                },
+                _ => {
+                    panic!("not implemented")
+                }
+            }
+        }
+        And(lhs, rhs) => {
+            let left = eval_expression(lhs, frame);
+            let right = eval_expression(rhs, frame);
+            match (left.value, right.value) {
+                (Value::ExitStatus, Value::ExitStatus) => Info {
+                    string: format!("{} && {}", left.string, right.string),
+                    raw_string: format!("{} && {}", left.string, right.string),
                     value: Value::ExitStatus,
                 },
                 _ => {

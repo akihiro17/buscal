@@ -174,6 +174,11 @@ fn binary_op_type(lhs: &TypeDecl, rhs: &TypeDecl, op: &str) -> Result<TypeDecl, 
             (_, _) => ExitStatus,
             _ => return Err(()),
         })
+    } else if op == "And" {
+        Ok(match (lhs, rhs) {
+            (ExitStatus, ExitStatus) => ExitStatus,
+            _ => return Err(()),
+        })
     } else {
         Ok(match (lhs, rhs) {
             (Any, _) => Any,
@@ -233,6 +238,7 @@ fn tc_expr<'src>(
         Add(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "Add")?,
         Eq(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "Eq")?,
         NotEq(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "NotEq")?,
+        And(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "And")?,
         _ => {
             panic!("not implemented")
         }
