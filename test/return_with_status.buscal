@@ -1,10 +1,10 @@
 fn f1(s: str) -> str {
   if s == "10" {
-    return_with_status output, exit_status(0);
+    return_with_status s + ";", exit_status(0);
   }
 
-  return_with_status output, exit_status(0);
+  return_with_status s+";", exit_status(1);
 }
 
-var output: str = f1("11");
+var output: str = f1("10");
 echo(output);
