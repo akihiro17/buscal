@@ -1,0 +1,17 @@
+var s1: str = "this is a pen";
+var s2: str = "this is a pen";
+if s1 == s2 {
+  echo("s1 equals to s2");
+}
+if s1 == "this is an apple" {
+  echo("should not reach");
+}
+
+var i1: i64 = 1;
+var i2: i64 = 1;
+if i1 == i2 {
+  echo("i1 equals to i2");
+}
+if i1 == 3 {
+  echo("should not reach");
+}

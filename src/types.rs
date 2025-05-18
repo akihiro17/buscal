@@ -8,6 +8,8 @@ pub enum Expression<'src> {
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
     Div(Box<Expression<'src>>, Box<Expression<'src>>),
+    Eq(Box<Expression<'src>>, Box<Expression<'src>>),
+    NotEq(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

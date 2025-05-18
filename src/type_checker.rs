@@ -159,7 +159,7 @@ fn tc_binary_op<'src>(
 ) -> Result<TypeDecl, TypeCheckError> {
     let lhst = tc_expr(lhs, ctx)?;
     let rhst = tc_expr(rhs, ctx)?;
-    binary_op_type(&lhst, &rhst).map_err(|_| {
+    binary_op_type(&lhst, &rhst, op).map_err(|_| {
         TypeCheckError::new(format!(
             "Operation {op} between incompatible type: {:?} and {:?}",
             lhst, rhst,
@@ -167,15 +167,22 @@ fn tc_binary_op<'src>(
     })
 }
 
-fn binary_op_type(lhs: &TypeDecl, rhs: &TypeDecl) -> Result<TypeDecl, ()> {
+fn binary_op_type(lhs: &TypeDecl, rhs: &TypeDecl, op: &str) -> Result<TypeDecl, ()> {
     use TypeDecl::*;
-    Ok(match (lhs, rhs) {
-        (Any, _) => Any,
-        (_, Any) => Any,
-        (I64, I64) => I64,
-        (Str, Str) => Str,
-        _ => return Err(()),
-    })
+    if op == "Eq" || op == "NotEq" {
+        Ok(match (lhs, rhs) {
+            (_, _) => ExitStatus,
+            _ => return Err(()),
+        })
+    } else {
+        Ok(match (lhs, rhs) {
+            (Any, _) => Any,
+            (_, Any) => Any,
+            (I64, I64) => I64,
+            (Str, Str) => Str,
+            _ => return Err(()),
+        })
+    }
 }
 
 fn tc_expr<'src>(
@@ -224,6 +231,8 @@ fn tc_expr<'src>(
             func.ret_type()
         }
         Add(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "Add")?,
+        Eq(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "Eq")?,
+        NotEq(lhs, rhs) => tc_binary_op(&lhs, &rhs, ctx, "NotEq")?,
         _ => {
             panic!("not implemented")
         }

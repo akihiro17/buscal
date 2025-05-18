@@ -151,8 +151,16 @@ pub fn eval_stmts<'src>(
                 for line in new_lines {
                     lines.push(line);
                 }
+                if let Some(f_stmts) = f_case {
+                    let mut f_stmts_lines = vec![];
+                    let mut new_frame = StackFrame::push_stack(frame);
+                    lines.push(format!("{}else", depth_space(depth)));
+                    eval_stmts(&f_stmts, &mut new_frame, &mut f_stmts_lines, depth + 1);
+                    for line in f_stmts_lines {
+                        lines.push(line);
+                    }
+                }
                 lines.push(format!("{}fi", depth_space(depth)));
-                // TODO: f_case
             }
             _ => {
                 println!("{:?}", statement);
@@ -347,6 +355,44 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                     string: format!("\"{}{}\"", left.raw_string, right.raw_string),
                     raw_string: format!("{}{}", left.raw_string, right.raw_string),
                     value: Value::Str,
+                },
+                _ => {
+                    panic!("not implemented")
+                }
+            }
+        }
+        Eq(lhs, rhs) => {
+            let left = eval_expression(lhs, frame);
+            let right = eval_expression(rhs, frame);
+            match (left.value, right.value) {
+                (Value::I64, Value::I64) => Info {
+                    string: format!("[ {} -eq {} ]", left.string, right.string),
+                    raw_string: format!("[ {} -eq {} ]", left.string, right.string),
+                    value: Value::ExitStatus,
+                },
+                (Value::Str, Value::Str) => Info {
+                    string: format!("[ {} == {} ]", left.string, right.string),
+                    raw_string: format!("[ {} == {} ]", left.string, right.string),
+                    value: Value::ExitStatus,
+                },
+                _ => {
+                    panic!("not implemented")
+                }
+            }
+        }
+        NotEq(lhs, rhs) => {
+            let left = eval_expression(lhs, frame);
+            let right = eval_expression(rhs, frame);
+            match (left.value, right.value) {
+                (Value::I64, Value::I64) => Info {
+                    string: format!("[ {} -ne {} ]", left.string, right.string),
+                    raw_string: format!("[ {} -ne {} ]", left.string, right.string),
+                    value: Value::ExitStatus,
+                },
+                (Value::Str, Value::Str) => Info {
+                    string: format!("[ {} != {} ]", left.string, right.string),
+                    raw_string: format!("[ {} != {} ]", left.string, right.string),
+                    value: Value::ExitStatus,
                 },
                 _ => {
                     panic!("not implemented")

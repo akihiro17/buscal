@@ -62,7 +62,10 @@ fn if_statement(i: &str) -> IResult<&str, Statement> {
     let (i, cond) = expr(i)?;
     // let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
     let (i, t_case) = delimited(open_brace, statements, close_brace)(i)?;
-    let (i, f_case) = opt(preceded(space_delimited(tag("else")), statements))(i)?;
+    let (i, f_case) = opt(preceded(
+        space_delimited(tag("else")),
+        delimited(open_brace, statements, close_brace),
+    ))(i)?;
 
     Ok((i, Statement::If(cond, t_case, f_case)))
 }
@@ -146,11 +149,16 @@ fn term(i: &str) -> IResult<&str, Expression> {
     let (i, init) = factor(i)?;
 
     fold_many0(
-        pair(space_delimited(alt((char('*'), char('/')))), factor),
+        pair(
+            space_delimited(alt((tag("*"), tag("/"), tag("==")))),
+            factor,
+        ),
         move || init.clone(),
-        |acc, (op, val): (char, Expression)| match op {
-            '*' => Expression::Mul(Box::new(acc), Box::new(val)),
-            '/' => Expression::Div(Box::new(acc), Box::new(val)),
+        |acc, (op, val): (&str, Expression)| match op {
+            "*" => Expression::Mul(Box::new(acc), Box::new(val)),
+            "/" => Expression::Div(Box::new(acc), Box::new(val)),
+            "==" => Expression::Eq(Box::new(acc), Box::new(val)),
+            "!=" => Expression::NotEq(Box::new(acc), Box::new(val)),
             _ => panic!("Multiplicative expression should have '*' or '/' operator"),
         },
     )(i)

@@ -1,0 +1,7 @@
+var s1: str = "this is a pen";
+var s2: str = "this is an apple";
+if s1 == s2 {
+  echo("s1 equals to s2");
+} else {
+  echo("s1 does not equal to s2");
+}
