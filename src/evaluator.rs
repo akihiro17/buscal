@@ -1,4 +1,7 @@
+use core::panic;
 use std::collections::{HashMap, VecDeque};
+
+use log::info;
 
 use crate::{
     standard,
@@ -58,6 +61,17 @@ impl<'src> StackFrame<'src> {
         }
         None
     }
+
+    fn get_vars(&self, name: &str) -> Option<&Value> {
+        let mut next_frame = Some(self);
+        while let Some(frame) = next_frame {
+            if let Some(var) = frame.vars.get(name) {
+                return Some(var);
+            }
+            next_frame = frame.uplevel;
+        }
+        None
+    }
 }
 
 pub fn eval_stmts<'src>(
@@ -67,6 +81,7 @@ pub fn eval_stmts<'src>(
     depth: usize,
 ) {
     for statement in stmts {
+        info!("statement: {:?}", statement);
         match statement {
             Statement::Expression(expr) => {
                 lines.push(format!(
@@ -138,6 +153,16 @@ pub fn eval_stmts<'src>(
                 let result = eval_expression(expr, frame);
                 lines.push(format!("{}echo {}", depth_space(depth), result.string));
             }
+            Statement::ReturnWithStatus(expr, expr2) => {
+                let result = eval_expression(expr, frame);
+                let exit_status = eval_expression(expr2, frame);
+                lines.push(format!("{}echo {}", depth_space(depth), result.string));
+                lines.push(format!(
+                    "{}return {}",
+                    depth_space(depth),
+                    exit_status.string
+                ));
+            }
             Statement::If(cond, t_case, f_case) => {
                 let cond_exp = eval_expression(cond, frame);
                 let mut new_lines = vec![];
@@ -162,6 +187,31 @@ pub fn eval_stmts<'src>(
                 }
                 lines.push(format!("{}fi", depth_space(depth)));
             }
+            Statement::For {
+                name,
+                from,
+                to,
+                stmts,
+            } => {
+                let from_exp = eval_expression(from, frame);
+                let to_exp = eval_expression(to, frame);
+                lines.push(format!(
+                    "{}for {} in $(seq {} {}); do",
+                    depth_space(depth),
+                    name,
+                    from_exp.string,
+                    to_exp.string
+                ));
+                //lines.push(format!("for {} in $(seq 1 10); do", name));
+                let mut new_lines = vec![];
+                let mut new_frame = StackFrame::push_stack(frame);
+                new_frame.vars.insert((*name).to_string(), Value::I64);
+                eval_stmts(stmts, &mut new_frame, &mut new_lines, depth + 1);
+                for line in new_lines {
+                    lines.push(line);
+                }
+                lines.push(format!("{}done", depth_space(depth)));
+            }
             _ => {
                 println!("{:?}", statement);
                 panic!("not impletemented")
@@ -174,34 +224,25 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
     use Expression::*;
     match expr {
         Ident(id) => {
-            if let Some(v) = frame.vars.get(*id) {
+            if let Some(var) = frame.get_vars(*id) {
                 return Info {
                     string: format!("\"${{{}}}\"", *id),
                     raw_string: format!("${{{}}}", *id),
-                    value: v.clone(),
+                    value: var.clone(),
                 };
-            }
-
-            let c = frame.uplevel;
-            loop {
-                match c {
-                    Some(s) => {
-                        if let Some(v) = s.vars.get(*id) {
-                            return Info {
-                                string: format!("\"${{{}}}\"", *id),
-                                raw_string: format!("${{{}}}", *id),
-                                value: v.clone(),
-                            };
-                        }
-                    }
-                    None => panic!("{} not found", *id),
-                }
+            } else {
+                panic!("{} not found", *id);
             }
         }
         NumLiteral(n) => Info {
             string: n.to_string(),
             raw_string: n.to_string(),
             value: Value::I64,
+        },
+        ExitStatus(n) => Info {
+            string: n.to_string(),
+            raw_string: n.to_string(),
+            value: Value::ExitStatus,
         },
         StrLiteral(str) => {
             let str = str.replace("\"", "\\\"");
@@ -316,12 +357,18 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                             }
                         }
                         "command" => {
-                            let new_args: VecDeque<Info> =
+                            let new_args: Vec<Info> =
                                 args.iter().map(|arg| eval_expression(arg, frame)).collect();
 
                             let test = new_args
                                 .iter()
-                                .map(|v| v.raw_string.clone())
+                                .map(|v| {
+                                    if v.raw_string == "$@" {
+                                        v.string.clone()
+                                    } else {
+                                        v.raw_string.clone()
+                                    }
+                                })
                                 .collect::<Vec<String>>()
                                 .join(" ");
 
@@ -332,7 +379,69 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                                 value: Value::Str,
                             }
                         }
+                        "exit_status" => {
+                            let new_args: Vec<Info> =
+                                args.iter().map(|arg| eval_expression(arg, frame)).collect();
 
+                            let test = new_args
+                                .iter()
+                                .map(|v| v.string.clone())
+                                .collect::<Vec<String>>()
+                                .join(" ");
+                            let str = format!("{}", test);
+                            Info {
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::ExitStatus,
+                            }
+                        }
+                        "succeeded" => {
+                            let str = format!("[ $? -eq 0 ]");
+
+                            Info {
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::ExitStatus,
+                            }
+                        }
+                        "capture2" => {
+                            let mut new_args: VecDeque<Info> =
+                                args.iter().map(|arg| eval_expression(arg, frame)).collect();
+
+                            let name = new_args.pop_front().unwrap().raw_string;
+
+                            frame.vars.insert(name.clone(), Value::Str);
+
+                            let test = new_args
+                                .iter()
+                                .map(|v| v.string.clone())
+                                .collect::<Vec<String>>()
+                                .join(" ");
+
+                            let str = format!("{}=$({})", name, test);
+                            Info {
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::ExitStatus,
+                            }
+                        }
+                        "sleep" => {
+                            let mut args_expressions: Vec<Info> =
+                                args.iter().map(|arg| eval_expression(arg, frame)).collect();
+
+                            let second = args_expressions
+                                .iter()
+                                .map(|v| v.string.clone())
+                                .collect::<Vec<String>>()
+                                .join(" ");
+
+                            let str = format!("sleep {}", second);
+                            Info {
+                                string: str.clone(),
+                                raw_string: str,
+                                value: Value::ExitStatus,
+                            }
+                        }
                         _ => {
                             panic!("native function {} not implemented", name);
                         }
@@ -409,7 +518,7 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
                     value: Value::ExitStatus,
                 },
                 _ => {
-                    panic!("not implemented")
+                    panic!("not implemented {} {}", left.string, right.string)
                 }
             }
         }

@@ -32,8 +32,14 @@ fn statement(i: &str) -> IResult<&str, Statement> {
         var_def,
         fn_def_statement,
         if_statement,
+        for_statement,
         terminated(
-            alt((var_assign, return_statement, expr_statement)),
+            alt((
+                var_assign,
+                return_with_status_statement,
+                return_statement,
+                expr_statement,
+            )),
             char(';'),
         ),
     ))(i)
@@ -99,6 +105,34 @@ fn return_statement(i: &str) -> IResult<&str, Statement> {
     let (i, _) = space_delimited(tag("return"))(i)?;
     let (i, ex) = space_delimited(expr)(i)?;
     Ok((i, Statement::Return(ex)))
+}
+
+fn return_with_status_statement(i: &str) -> IResult<&str, Statement> {
+    let (i, _) = space_delimited(tag("return_with_status"))(i)?;
+    let (i, ex1) = space_delimited(expr)(i)?;
+    let (i, _) = space_delimited(char(','))(i)?;
+    let (i, ex2) = space_delimited(expr)(i)?;
+    Ok((i, Statement::ReturnWithStatus(ex1, ex2)))
+}
+
+fn for_statement(i: &str) -> IResult<&str, Statement> {
+    let (i, _) = space_delimited(tag("for"))(i)?;
+    let (i, name) = space_delimited(identifier)(i)?;
+    let (i, _) = space_delimited(tag("in"))(i)?;
+    let (i, from) = expr(i)?;
+    let (i, _) = space_delimited(tag(".."))(i)?;
+    let (i, to) = expr(i)?;
+    let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
+
+    Ok((
+        i,
+        Statement::For {
+            name,
+            from,
+            to,
+            stmts,
+        },
+    ))
 }
 
 fn argument(i: &str) -> IResult<&str, (&str, TypeDecl)> {

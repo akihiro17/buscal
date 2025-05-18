@@ -35,6 +35,7 @@ fn main() {
     let mut frame = evaluator::StackFrame::new();
     let mut lines = vec![];
     lines.push("#!/usr/bin/env bash".to_string());
+    lines.push("set -e".to_string());
     evaluator::eval_stmts(&parsed_statements, &mut frame, &mut lines, 0);
 
     for line in lines {

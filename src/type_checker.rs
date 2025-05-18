@@ -64,8 +64,38 @@ pub fn type_check<'src>(
             Statement::Return(e) => {
                 return tc_expr(e, ctx);
             }
+            Statement::ReturnWithStatus(e1, e2) => {
+                let e2st = tc_expr(e2, ctx)?;
+                match e2st {
+                    TypeDecl::ExitStatus => {
+                        // nothing
+                    }
+                    _ => {
+                        return Err(TypeCheckError::new(format!(
+                            "second argument of return_with_status must be ExitStatus",
+                        )))
+                    }
+                }
+                return tc_expr(e1, ctx);
+            }
             Statement::If(cond, _, _) => {
                 tc_coerce_type(&tc_expr(cond, ctx)?, &TypeDecl::ExitStatus)?;
+            }
+            Statement::For {
+                name,
+                from,
+                to,
+                stmts,
+            } => {
+                let from_type = tc_expr(from, ctx)?;
+                let to_type = tc_expr(to, ctx)?;
+                match (from_type, to_type) {
+                    (TypeDecl::I64, TypeDecl::I64) => {}
+                    _ => return Err(TypeCheckError::new(String::from("cannot be assigned to"))),
+                }
+                ctx.vars.insert(name, TypeDecl::I64);
+
+                type_check(stmts, ctx)?;
             }
         }
     }
@@ -92,7 +122,7 @@ impl TypeCheckError {
 pub struct Context<'src> {
     /// Variables table for type checking.
     vars: HashMap<&'src str, TypeDecl>,
-    /// Function names are owned strings because it can be either from source or native.
+    /// Function names are owned strings because it can Be either from source or native.
     funcs: HashMap<String, FnDef<'src>>,
     super_context: Option<&'src Context<'src>>,
 }
@@ -171,7 +201,8 @@ fn binary_op_type(lhs: &TypeDecl, rhs: &TypeDecl, op: &str) -> Result<TypeDecl, 
     use TypeDecl::*;
     if op == "Eq" || op == "NotEq" {
         Ok(match (lhs, rhs) {
-            (_, _) => ExitStatus,
+            (I64, I64) => ExitStatus,
+            (Str, Str) => ExitStatus,
             _ => return Err(()),
         })
     } else if op == "And" {
@@ -198,6 +229,7 @@ fn tc_expr<'src>(
     Ok(match &e {
         NumLiteral(_val) => TypeDecl::I64,
         StrLiteral(_val) => TypeDecl::Str,
+        ExitStatus(_val) => TypeDecl::ExitStatus,
         Ident(str) => {
             if let Some(val) = ctx.get_var(str) {
                 return Ok(val);

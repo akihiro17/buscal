@@ -3,6 +3,7 @@ pub enum Expression<'src> {
     Ident(&'src str),
     NumLiteral(i64),
     StrLiteral(String),
+    ExitStatus(u8),
     FnInvoke(&'src str, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -25,7 +26,14 @@ pub enum Statement<'src> {
         stmts: Statements<'src>,
     },
     Return(Expression<'src>),
+    ReturnWithStatus(Expression<'src>, Expression<'src>),
     If(Expression<'src>, Statements<'src>, Option<Statements<'src>>),
+    For {
+        name: &'src str,
+        from: Expression<'src>,
+        to: Expression<'src>,
+        stmts: Statements<'src>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

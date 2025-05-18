@@ -1,0 +1,14 @@
+fn retry() -> str {
+  for i in 1 .. 30 {
+    if capture2("output", command("(", "$(date +%s)", "%", "10", ")")) {
+      if output == "0" {
+        return_with_status output, exit_status(0);
+      }
+      sleep(1);
+    }
+  }
+  return_with_status "", exit_status(1);
+}
+
+var output: str = retry();
+echo(output);

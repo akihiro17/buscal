@@ -1,0 +1,7 @@
+if capture2("d1", command("date", "+%Y-%m-%d", "-d 2025-05-18")) && capture2("d2", command("date", "+%Y-%m-%d", "-d 2024-05-18")) {
+  echo("success");
+  echo(d1);
+  echo(d2);
+} else {
+  echo("fail");
+}
