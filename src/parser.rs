@@ -4,30 +4,40 @@ use nom::{
         complete::{tag, take_until},
         streaming::{is_not, take_while_m_n},
     },
-    character::complete::{alpha1, alphanumeric1, char, multispace0, multispace1},
+    character::{
+        complete::{alpha1, alphanumeric1, char, multispace0, multispace1},
+        streaming::none_of,
+    },
     combinator::{map, map_opt, map_res, opt, recognize, value, verify},
     error::{FromExternalError, ParseError},
     multi::{fold_many0, many0, separated_list0},
     number::complete::recognize_float,
     sequence::{delimited, pair, preceded, terminated},
-    Finish, IResult, Parser,
+    Finish, IResult, InputTake, Offset, Parser, Slice,
 };
 
-use crate::types::{Expression, Statement, Statements, TypeDecl};
+/// Calculate offset between the start positions of the input spans and return a span between them.
+///
+/// Note: `i` shall start earlier than `r`, otherwise wrapping would occur.
+pub fn calc_offset<'a>(i: Span<'a>, r: Span<'a>) -> Span<'a> {
+    i.take(i.offset(&r))
+}
+
+use crate::types::{ExprEnum, Expression, Span, Statement, Statements, TypeDecl};
 
 // Statement
-pub fn statements_finish(i: &str) -> Result<Statements, nom::error::Error<&str>> {
+pub fn statements_finish(i: Span) -> Result<Statements, nom::error::Error<Span>> {
     let (_, res) = statements(i).finish()?;
     Ok(res)
 }
 
-fn statements(i: &str) -> IResult<&str, Statements> {
+fn statements(i: Span) -> IResult<Span, Statements> {
     let (i, stmts) = many0(statement)(i)?;
     let (i, _) = opt(char(';'))(i)?;
     Ok((i, stmts))
 }
 
-fn statement(i: &str) -> IResult<&str, Statement> {
+fn statement(i: Span) -> IResult<Span, Statement> {
     alt((
         var_def,
         fn_def_statement,
@@ -45,25 +55,42 @@ fn statement(i: &str) -> IResult<&str, Statement> {
     ))(i)
 }
 
-fn var_def(i: &str) -> IResult<&str, Statement> {
+fn var_def(i: Span) -> IResult<Span, Statement> {
+    let span = i;
     let (i, _) = delimited(multispace0, tag("var"), multispace1)(i)?;
     let (i, name) = space_delimited(identifier)(i)?;
     let (i, _) = space_delimited(char(':'))(i)?;
     let (i, td) = type_decl(i)?;
     let (i, _) = space_delimited(char('='))(i)?;
-    let (i, expr) = space_delimited(expr)(i)?;
+    let (i, ex) = space_delimited(expr)(i)?;
     let (i, _) = space_delimited(char(';'))(i)?;
-    Ok((i, Statement::VarDef(name, td, expr)))
+    Ok((
+        i,
+        Statement::VarDef {
+            span: calc_offset(span, i),
+            name,
+            td,
+            ex,
+        },
+    ))
 }
 
-fn var_assign(i: &str) -> IResult<&str, Statement> {
+fn var_assign(i: Span) -> IResult<Span, Statement> {
+    let span = i;
     let (i, name) = space_delimited(identifier)(i)?;
     let (i, _) = space_delimited(char('='))(i)?;
-    let (i, expr) = space_delimited(expr)(i)?;
-    Ok((i, Statement::VarAssign(name, expr)))
+    let (i, ex) = space_delimited(expr)(i)?;
+    Ok((
+        i,
+        Statement::VarAssign {
+            span: calc_offset(span, i),
+            name,
+            ex,
+        },
+    ))
 }
 
-fn if_statement(i: &str) -> IResult<&str, Statement> {
+fn if_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("if"))(i)?;
     let (i, cond) = expr(i)?;
     // let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
@@ -76,12 +103,12 @@ fn if_statement(i: &str) -> IResult<&str, Statement> {
     Ok((i, Statement::If(cond, t_case, f_case)))
 }
 
-fn expr_statement(i: &str) -> IResult<&str, Statement> {
+fn expr_statement(i: Span) -> IResult<Span, Statement> {
     let (i, res) = expr(i)?;
     Ok((i, Statement::Expression(res)))
 }
 
-fn fn_def_statement(i: &str) -> IResult<&str, Statement> {
+fn fn_def_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("fn"))(i)?;
     let (i, name) = space_delimited(identifier)(i)?;
     let (i, _) = space_delimited(tag("("))(i)?;
@@ -101,13 +128,13 @@ fn fn_def_statement(i: &str) -> IResult<&str, Statement> {
     ))
 }
 
-fn return_statement(i: &str) -> IResult<&str, Statement> {
+fn return_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("return"))(i)?;
     let (i, ex) = space_delimited(expr)(i)?;
     Ok((i, Statement::Return(ex)))
 }
 
-fn return_with_status_statement(i: &str) -> IResult<&str, Statement> {
+fn return_with_status_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("return_with_status"))(i)?;
     let (i, ex1) = space_delimited(expr)(i)?;
     let (i, _) = space_delimited(char(','))(i)?;
@@ -115,7 +142,8 @@ fn return_with_status_statement(i: &str) -> IResult<&str, Statement> {
     Ok((i, Statement::ReturnWithStatus(ex1, ex2)))
 }
 
-fn for_statement(i: &str) -> IResult<&str, Statement> {
+fn for_statement(i: Span) -> IResult<Span, Statement> {
+    let i0 = i;
     let (i, _) = space_delimited(tag("for"))(i)?;
     let (i, name) = space_delimited(identifier)(i)?;
     let (i, _) = space_delimited(tag("in"))(i)?;
@@ -127,6 +155,7 @@ fn for_statement(i: &str) -> IResult<&str, Statement> {
     Ok((
         i,
         Statement::For {
+            span: calc_offset(i0, i),
             name,
             from,
             to,
@@ -135,7 +164,7 @@ fn for_statement(i: &str) -> IResult<&str, Statement> {
     ))
 }
 
-fn argument(i: &str) -> IResult<&str, (&str, TypeDecl)> {
+fn argument(i: Span) -> IResult<Span, (Span, TypeDecl)> {
     let (i, ident) = space_delimited(identifier)(i)?;
     let (i, _) = char(':')(i)?;
     let (i, td) = type_decl(i)?;
@@ -143,11 +172,11 @@ fn argument(i: &str) -> IResult<&str, (&str, TypeDecl)> {
     Ok((i, (ident, td)))
 }
 
-fn type_decl(i: &str) -> IResult<&str, TypeDecl> {
+fn type_decl(i: Span) -> IResult<Span, TypeDecl> {
     let (i, td) = space_delimited(identifier)(i)?;
     Ok((
         i,
-        match td {
+        match *td {
             "i64" => TypeDecl::I64,
             "str" => TypeDecl::Str,
             "command" => TypeDecl::Command,
@@ -159,29 +188,32 @@ fn type_decl(i: &str) -> IResult<&str, TypeDecl> {
 }
 
 // Expression
-fn parens(i: &str) -> IResult<&str, Expression> {
+fn parens(i: Span) -> IResult<Span, Expression> {
     space_delimited(delimited(tag("("), expr, tag(")")))(i)
 }
 
-fn expr(i: &str) -> IResult<&str, Expression> {
-    let (i, init) = term(i)?;
+fn expr(i: Span) -> IResult<Span, Expression> {
+    let (r, init) = term(i)?;
 
     fold_many0(
         pair(space_delimited(alt((tag("+"), tag("-"), tag("&&")))), term),
         move || init.clone(),
-        |acc, (op, val): (&str, Expression)| match op {
-            "+" => Expression::Add(Box::new(acc), Box::new(val)),
-            "-" => Expression::Sub(Box::new(acc), Box::new(val)),
-            "&&" => Expression::And(Box::new(acc), Box::new(val)),
-            _ => {
-                panic!("Additive expression should have '+' or '-' operator")
+        |acc, (op, val): (Span, Expression)| {
+            let span = calc_offset(i, acc.span);
+            match *op {
+                "+" => Expression::new(ExprEnum::Add(Box::new(acc), Box::new(val)), span),
+                "-" => Expression::new(ExprEnum::Sub(Box::new(acc), Box::new(val)), span),
+                "&&" => Expression::new(ExprEnum::And(Box::new(acc), Box::new(val)), span),
+                _ => {
+                    panic!("Additive expression should have '+' or '-' operator")
+                }
             }
         },
-    )(i)
+    )(r)
 }
 
-fn term(i: &str) -> IResult<&str, Expression> {
-    let (i, init) = factor(i)?;
+fn term(i: Span) -> IResult<Span, Expression> {
+    let (r, init) = factor(i)?;
 
     fold_many0(
         pair(
@@ -189,52 +221,71 @@ fn term(i: &str) -> IResult<&str, Expression> {
             factor,
         ),
         move || init.clone(),
-        |acc, (op, val): (&str, Expression)| match op {
-            "*" => Expression::Mul(Box::new(acc), Box::new(val)),
-            "/" => Expression::Div(Box::new(acc), Box::new(val)),
-            "==" => Expression::Eq(Box::new(acc), Box::new(val)),
-            "!=" => Expression::NotEq(Box::new(acc), Box::new(val)),
-            _ => panic!("Multiplicative expression should have '*' or '/' operator"),
+        |acc, (op, val): (Span, Expression)| {
+            let span = calc_offset(i, acc.span);
+            match *op {
+                "*" => Expression::new(ExprEnum::Mul(Box::new(acc), Box::new(val)), i),
+                "/" => Expression::new(ExprEnum::Div(Box::new(acc), Box::new(val)), i),
+                "==" => Expression::new(ExprEnum::Eq(Box::new(acc), Box::new(val)), i),
+                "!=" => Expression::new(ExprEnum::NotEq(Box::new(acc), Box::new(val)), i),
+                _ => panic!("Multiplicative expression should have '*' or '/' operator"),
+            }
         },
-    )(i)
+    )(r)
 }
 
-fn factor(i: &str) -> IResult<&str, Expression> {
-    alt((str_literal, number, func_call, ident, parens))(i)
+fn factor(i: Span) -> IResult<Span, Expression> {
+    // alt((str_literal, num_literal, func_call, ident, parens))(i)
+    alt((str_literal, num_literal, func_call, ident, parens))(i)
 }
 
-fn func_call(i: &str) -> IResult<&str, Expression> {
+fn func_call(i: Span) -> IResult<Span, Expression> {
     let (r, ident) = space_delimited(identifier)(i)?;
     let (r, args) = space_delimited(delimited(
         tag("("),
         many0(delimited(multispace0, expr, space_delimited(opt(tag(","))))),
         tag(")"),
     ))(r)?;
-    Ok((r, Expression::FnInvoke(ident, args)))
+    Ok((
+        r,
+        Expression {
+            expr: ExprEnum::FnInvoke(ident, args),
+            span: i,
+        },
+    ))
 }
 
-fn ident(input: &str) -> IResult<&str, Expression> {
+fn ident(input: Span) -> IResult<Span, Expression> {
     let (r, res) = space_delimited(identifier)(input)?;
-    Ok((r, Expression::Ident(res)))
+    Ok((
+        r,
+        Expression {
+            expr: ExprEnum::Ident(res),
+            span: input,
+        },
+    ))
 }
 
-fn identifier(input: &str) -> IResult<&str, &str> {
+fn identifier(input: Span) -> IResult<Span, Span> {
     recognize(pair(
         alt((alpha1, tag("_"))),
         many0(alt((alphanumeric1, tag("_")))),
     ))(input)
 }
 
-fn number(input: &str) -> IResult<&str, Expression> {
+fn num_literal(input: Span) -> IResult<Span, Expression> {
     let (r, v) = space_delimited(recognize_float)(input)?;
     Ok((
         r,
-        Expression::NumLiteral(v.parse().map_err(|_| {
-            nom::Err::Error(nom::error::Error {
-                input,
-                code: nom::error::ErrorKind::Digit,
-            })
-        })?),
+        Expression::new(
+            ExprEnum::NumLiteral(v.parse().map_err(|_| {
+                nom::Err::Error(nom::error::Error {
+                    input,
+                    code: nom::error::ErrorKind::Digit,
+                })
+            })?),
+            v,
+        ),
     ))
 }
 
@@ -247,9 +298,9 @@ fn number(input: &str) -> IResult<&str, Expression> {
 /// Parse a unicode sequence, of the form u{XXXX}, where XXXX is 1 to 6
 /// hexadecimal numerals. We will combine this later with parse_escaped_char
 /// to parse sequences like \u{00AC}.
-fn parse_unicode<'a, E>(input: &'a str) -> IResult<&'a str, char, E>
+fn parse_unicode<'a, E>(input: Span<'a>) -> IResult<Span<'a>, char, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, std::num::ParseIntError>,
+    E: ParseError<Span<'a>> + FromExternalError<Span<'a>, std::num::ParseIntError>,
 {
     // `take_while_m_n` parses between `m` and `n` bytes (inclusive) that match
     // a predicate. `parse_hex` here parses between 1 and 6 hexadecimal numerals.
@@ -268,7 +319,9 @@ where
     // `map_res` takes the result of a parser and applies a function that returns
     // a Result. In this case we take the hex bytes from parse_hex and attempt to
     // convert them to a u32.
-    let parse_u32 = map_res(parse_delimited_hex, move |hex| u32::from_str_radix(hex, 16));
+    let parse_u32 = map_res(parse_delimited_hex, |hex: Span<'a>| {
+        u32::from_str_radix(hex.fragment(), 16)
+    });
 
     // map_opt is like map_res, but it takes an Option instead of a Result. If
     // the function returns None, map_opt returns an error. In this case, because
@@ -278,9 +331,9 @@ where
 }
 
 /// Parse an escaped character: \n, \t, \r, \u{00AC}, etc.
-fn parse_escaped_char<'a, E>(input: &'a str) -> IResult<&'a str, char, E>
+fn parse_escaped_char<'a, E>(input: Span<'a>) -> IResult<Span<'a>, char, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, std::num::ParseIntError>,
+    E: ParseError<Span<'a>> + FromExternalError<Span<'a>, std::num::ParseIntError>,
 {
     preceded(
         char('\\'),
@@ -304,104 +357,104 @@ where
     )(input)
 }
 
-/// Parse a backslash, followed by any amount of whitespace. This is used later
-/// to discard any escaped whitespace.
-fn parse_escaped_whitespace<'a, E: ParseError<&'a str>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
+fn parse_escaped_whitespace<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Span<'a>, E> {
     preceded(char('\\'), multispace1)(input)
 }
 
-/// Parse a non-empty block of text that doesn't include \ or "
-fn parse_literal<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
-    // `is_not` parses a string of 0 or more characters that aren't one of the
-    // given characters.
-    let not_quote_slash = is_not("\"\\");
-
-    // `verify` runs a parser, then runs a verification function on the output of
-    // the parser. The verification function accepts out output only if it
-    // returns true. In this case, we want to ensure that the output of is_not
-    // is non-empty.
-    verify(not_quote_slash, |s: &str| !s.is_empty())(input)
+fn parse_literal<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Span<'a>, E> {
+    verify(is_not("\"\\"), |s: &Span| !s.fragment().is_empty())(input)
 }
 
-/// A string fragment contains a fragment of a string being parsed: either
-/// a non-empty Literal (a series of non-escaped characters), a single
-/// parsed escaped character, or a block of escaped whitespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StringFragment<'a> {
-    Literal(&'a str),
+    Literal(Span<'a>),
     EscapedChar(char),
     EscapedWS,
 }
 
-/// Combine parse_literal, parse_escaped_whitespace, and parse_escaped_char
-/// into a StringFragment.
-fn parse_fragment<'a, E>(input: &'a str) -> IResult<&'a str, StringFragment<'a>, E>
+fn parse_fragment<'a, E>(input: Span<'a>) -> IResult<Span<'a>, StringFragment<'a>, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, std::num::ParseIntError>,
+    E: ParseError<Span<'a>> + FromExternalError<Span<'a>, std::num::ParseIntError>,
 {
     alt((
-        // The `map` combinator runs a parser, then applies a function to the output
-        // of that parser.
         map(parse_literal, StringFragment::Literal),
         map(parse_escaped_char, StringFragment::EscapedChar),
         value(StringFragment::EscapedWS, parse_escaped_whitespace),
     ))(input)
 }
 
-/// Parse a string. Use a loop of parse_fragment and push all of the fragments
-/// into an output string.
-fn parse_string<'a, E>(input: &'a str) -> IResult<&'a str, String, E>
+#[derive(Debug)]
+struct SpannedString<'a> {
+    span: Span<'a>, // start position
+    value: String,
+}
+
+fn parse_string<'a, E>(input: Span<'a>) -> IResult<Span<'a>, SpannedString<'a>, E>
 where
-    E: ParseError<&'a str> + FromExternalError<&'a str, std::num::ParseIntError>,
+    E: ParseError<Span<'a>> + FromExternalError<Span<'a>, std::num::ParseIntError>,
 {
-    // fold_many0 is the equivalent of iterator::fold. It runs a parser in a loop,
-    // and for each output value, calls a folding function on each output value.
-    let build_string = fold_many0(
-        // Our parser function– parses a single string fragment
-        parse_fragment,
-        // Our init value, an empty string
-        String::new,
-        // Our folding function. For each fragment, append the fragment to the
-        // string.
-        |mut string, fragment| {
-            match fragment {
-                StringFragment::Literal(s) => string.push_str(s),
-                StringFragment::EscapedChar(c) => string.push(c),
-                StringFragment::EscapedWS => {}
-            }
-            string
+    let start = input;
+
+    let build_string = fold_many0(parse_fragment, String::new, |mut acc, fragment| {
+        match fragment {
+            StringFragment::Literal(s) => acc.push_str(s.fragment()),
+            StringFragment::EscapedChar(c) => acc.push(c),
+            StringFragment::EscapedWS => {}
+        }
+        acc
+    });
+
+    let (remaining, parsed) = delimited(char('"'), build_string, char('"'))(input)?;
+
+    Ok((
+        remaining,
+        SpannedString {
+            span: start.slice(..input.offset(&remaining)),
+            value: parsed,
         },
-    );
-
-    // Finally, parse the string. Note that, if `build_string` could accept a raw
-    // " character, the closing delimiter " would never match. When using
-    // `delimited` with a looping parser (like fold_many0), be sure that the
-    // loop won't accidentally match your closing delimiter!
-    delimited(char('"'), build_string, char('"'))(input)
+    ))
 }
 
-fn str_literal(i: &str) -> IResult<&str, Expression> {
-    let (r, val) = parse_string(i)?;
-    Ok((r, Expression::StrLiteral(val)))
+fn str_literal(i: Span) -> IResult<Span, Expression> {
+    let (i, str) = parse_string(i)?;
+    Ok((i, Expression::new(ExprEnum::StrLiteral(str.value), i)))
 }
+
+// fn str_literal(i: Span) -> IResult<Span, Expression> {
+//     let (r0, _) = preceded(multispace0, char('\"'))(i)?;
+//     let (r, val) = many0(none_of("\""))(r0)?;
+//     let (r, _) = terminated(char('"'), multispace0)(r)?;
+//     Ok((
+//         r,
+//         Expression::new(
+//             ExprEnum::StrLiteral(
+//                 val.iter()
+//                     .collect::<String>()
+//                     .replace("\\\\", "\\")
+//                     .replace("\\n", "\n"),
+//             ),
+//             r,
+//         ),
+//     ))
+// }
 
 fn space_delimited<'src, O, E>(
-    f: impl Parser<&'src str, O, E>,
-) -> impl FnMut(&'src str) -> IResult<&'src str, O, E>
+    f: impl Parser<Span<'src>, O, E>,
+) -> impl FnMut(Span<'src>) -> IResult<Span<'src>, O, E>
 where
-    E: ParseError<&'src str>,
+    E: ParseError<Span<'src>>,
 {
     delimited(multispace0, f, multispace0)
 }
 
-pub fn open_brace(i: &str) -> IResult<&str, ()> {
+pub fn open_brace(i: Span) -> IResult<Span, ()> {
     let (i, _) = self::space_delimited(char('{'))(i)?;
     Ok((i, ()))
 }
 
-pub fn close_brace(i: &str) -> IResult<&str, ()> {
+pub fn close_brace(i: Span) -> IResult<Span, ()> {
     let (i, _) = space_delimited(char('}'))(i)?;
     Ok((i, ()))
 }

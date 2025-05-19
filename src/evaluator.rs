@@ -5,7 +5,7 @@ use log::info;
 
 use crate::{
     standard,
-    types::{Expression, FnDef, Statement, Statements, TypeDecl, UserFn},
+    types::{ExprEnum, FnDef, Statement, Statements, TypeDecl, UserFn},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +146,7 @@ pub fn eval_stmts<'src>(
 }
 
 fn eval_if_statement<'src>(
-    cond: &Expression<'src>,
+    cond: &ExprEnum<'src>,
     t_case: &Statements<'src>,
     f_case: &Option<Statements<'src>>,
     frame: &mut StackFrame<'src>,
@@ -183,8 +183,8 @@ fn eval_if_statement<'src>(
 
 fn eval_for_statement<'src>(
     name: &&'src str,
-    from: &Expression<'src>,
-    to: &Expression<'src>,
+    from: &ExprEnum<'src>,
+    to: &ExprEnum<'src>,
     stmts: &Statements<'src>,
     frame: &mut StackFrame<'src>,
     lines: &mut Vec<String>,
@@ -260,8 +260,8 @@ fn eval_fn_invoke_statement<'src>(
     lines.push(format!("}}"));
 }
 
-fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Info {
-    use Expression::*;
+fn eval_expression<'src>(expr: &ExprEnum, frame: &mut StackFrame<'src>) -> Info {
+    use ExprEnum::*;
     match expr {
         Ident(id) => {
             if let Some(var) = frame.get_vars(*id) {
@@ -561,7 +561,7 @@ fn eval_expression<'src>(expr: &Expression, frame: &mut StackFrame<'src>) -> Inf
     }
 }
 
-fn parse_format_string(args: &Vec<Expression>, frame: &mut StackFrame, raw: bool) -> String {
+fn parse_format_string(args: &Vec<ExprEnum>, frame: &mut StackFrame, raw: bool) -> String {
     let mut args_exprs: VecDeque<Info> =
         args.iter().map(|arg| eval_expression(arg, frame)).collect();
 

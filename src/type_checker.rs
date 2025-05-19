@@ -1,40 +1,68 @@
 use std::collections::HashMap;
 
 use log::info;
+use nom::{InputTake, Offset};
+use nom_locate::LocatedSpan;
 
 use crate::{
-    standard::functions,
-    types::{Expression, FnDef, Statement, TypeDecl, UserFn},
+    standard::{self, functions},
+    types::{ExprEnum, Expression, FnDef, Span, Statement, Statements, TypeDecl, UserFn},
 };
+
+impl<'src> Statement<'src> {
+    fn span(&self) -> Option<Span<'src>> {
+        use Statement::*;
+        Some(match self {
+            Expression(ex) => ex.span,
+            VarDef { span, .. } => *span,
+            VarAssign { span, .. } => *span,
+            For { span, .. } => *span,
+            FnDef { name, stmts, .. } => calc_offset(*name, stmts.span()),
+            Return(ex) => ex.span,
+            ReturnWithStatus(ex, _) => ex.span,
+            If(ex, _, _) => ex.span,
+        })
+    }
+}
+
+trait GetSpan<'a> {
+    fn span(&self) -> Span<'a>;
+}
+
+impl<'a> GetSpan<'a> for Statements<'a> {
+    fn span(&self) -> Span<'a> {
+        self.iter().find_map(|stmt| stmt.span()).unwrap()
+    }
+}
 
 pub fn type_check<'src>(
     stmts: &Vec<Statement<'src>>,
-    ctx: &mut Context<'src>,
-) -> Result<TypeDecl, TypeCheckError> {
+    ctx: &mut Context<'src, '_>,
+) -> Result<TypeDecl, TypeCheckError<'src>> {
     let mut res = TypeDecl::Any;
     for stmt in stmts {
         match stmt {
-            Statement::VarDef(var, type_, init_expr) => {
-                let init_type = tc_expr(init_expr, ctx)?;
+            Statement::VarDef { name, td, ex, .. } => {
+                let init_type = tc_expr(ex, ctx)?;
                 if let TypeDecl::Command = init_type {
-                    return Err(TypeCheckError::new(format!(
-                        "{:?} cannot be assigned to var",
-                        init_type
-                    )));
+                    return Err(TypeCheckError::new(
+                        format!("{:?} cannot be assigned to var", init_type),
+                        ex.span,
+                    ));
                 }
-                let init_type = tc_coerce_type(&init_type, type_)?;
-                ctx.vars.insert(*var, init_type);
+                let init_type = tc_coerce_type(&init_type, td, ex.span)?;
+                ctx.vars.insert(**name, init_type);
             }
-            Statement::VarAssign(var, expr) => {
-                let init_type = tc_expr(expr, ctx)?;
+            Statement::VarAssign { span, name, ex } => {
+                let init_type = tc_expr(ex, ctx)?;
                 if let TypeDecl::Command = init_type {
-                    return Err(TypeCheckError::new(format!(
-                        "{:?} cannot be assigned to var",
-                        init_type
-                    )));
+                    return Err(TypeCheckError::new(
+                        format!("{:?} cannot be assigned to var", init_type),
+                        ex.span,
+                    ));
                 }
-                let var = ctx.vars.get(*var).expect("[VarAssign]Variable not found");
-                tc_coerce_type(&init_type, var)?;
+                let var = ctx.vars.get(**name).expect("[VarAssign]Variable not found");
+                tc_coerce_type(&init_type, var, ex.span)?;
             }
             Statement::FnDef {
                 name,
@@ -56,7 +84,7 @@ pub fn type_check<'src>(
                     subctx.vars.insert(arg, *ty);
                 }
                 let last_stmt = type_check(stmts, &mut subctx)?;
-                tc_coerce_type(&last_stmt, &ret_type)?;
+                tc_coerce_type(&last_stmt, &ret_type, stmts.span())?;
             }
             Statement::Expression(e) => {
                 res = tc_expr(&e, ctx)?;
@@ -65,37 +93,25 @@ pub fn type_check<'src>(
                 return tc_expr(e, ctx);
             }
             Statement::ReturnWithStatus(e1, e2) => {
-                let e2st = tc_expr(e2, ctx)?;
-                match e2st {
-                    TypeDecl::ExitStatus => {
-                        // nothing
-                    }
-                    _ => {
-                        return Err(TypeCheckError::new(format!(
-                            "second argument of return_with_status must be ExitStatus",
-                        )))
-                    }
-                }
+                tc_coerce_type(&tc_expr(e2, ctx)?, &TypeDecl::ExitStatus, e2.span)?;
+
                 return tc_expr(e1, ctx);
             }
             Statement::If(cond, _, _) => {
-                tc_coerce_type(&tc_expr(cond, ctx)?, &TypeDecl::ExitStatus)?;
+                tc_coerce_type(&tc_expr(cond, ctx)?, &TypeDecl::ExitStatus, cond.span)?;
             }
             Statement::For {
+                span,
                 name,
                 from,
                 to,
                 stmts,
             } => {
-                let from_type = tc_expr(from, ctx)?;
-                let to_type = tc_expr(to, ctx)?;
-                match (from_type, to_type) {
-                    (TypeDecl::I64, TypeDecl::I64) => {}
-                    _ => return Err(TypeCheckError::new(String::from("cannot be assigned to"))),
-                }
+                tc_coerce_type(&tc_expr(from, ctx)?, &TypeDecl::I64, from.span)?;
+                tc_coerce_type(&tc_expr(to, ctx)?, &TypeDecl::I64, to.span)?;
                 ctx.vars.insert(name, TypeDecl::I64);
 
-                type_check(stmts, ctx)?;
+                res = type_check(stmts, ctx)?;
             }
         }
     }
@@ -103,31 +119,39 @@ pub fn type_check<'src>(
 }
 
 #[derive(Debug)]
-pub struct TypeCheckError {
+pub struct TypeCheckError<'src> {
     msg: String,
+    span: Span<'src>,
 }
 
-impl<'src> std::fmt::Display for TypeCheckError {
+impl<'src> std::fmt::Display for TypeCheckError<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg,)
+        write!(
+            f,
+            "{}\nlocation: {}:{}: {}",
+            self.msg,
+            self.span.location_line(),
+            self.span.get_utf8_column(),
+            self.span.fragment()
+        )
     }
 }
 
-impl TypeCheckError {
-    fn new(msg: String) -> Self {
-        Self { msg }
+impl<'src> TypeCheckError<'src> {
+    fn new(msg: String, span: Span<'src>) -> Self {
+        Self { msg, span }
     }
 }
 
-pub struct Context<'src> {
+pub struct Context<'src, 'ctx> {
     /// Variables table for type checking.
-    vars: HashMap<&'src str, TypeDecl>,
-    /// Function names are owned strings because it can Be either from source or native.
-    funcs: HashMap<String, FnDef<'src>>,
-    super_context: Option<&'src Context<'src>>,
+    pub vars: HashMap<&'src str, TypeDecl>,
+    /// Function names are owned strings because it can be either from source or native.
+    pub funcs: HashMap<String, FnDef<'src>>,
+    pub super_context: Option<&'ctx Context<'src, 'ctx>>,
 }
 
-impl<'src> Context<'src> {
+impl<'src, 'ctx> Context<'src, 'ctx> {
     pub fn new() -> Self {
         Self {
             vars: HashMap::new(),
@@ -154,7 +178,7 @@ impl<'src> Context<'src> {
         }
     }
 
-    fn push_stack(super_ctx: &'src Self) -> Self {
+    fn push_stack(super_ctx: &'ctx Self) -> Self {
         Self {
             vars: HashMap::new(),
             funcs: HashMap::new(),
@@ -163,7 +187,11 @@ impl<'src> Context<'src> {
     }
 }
 
-fn tc_coerce_type<'src>(value: &TypeDecl, target: &TypeDecl) -> Result<TypeDecl, TypeCheckError> {
+fn tc_coerce_type<'src>(
+    value: &TypeDecl,
+    target: &TypeDecl,
+    span: Span<'src>,
+) -> Result<TypeDecl, TypeCheckError<'src>> {
     use TypeDecl::*;
     Ok(match (value, target) {
         (_, Any) => value.clone(),
@@ -173,10 +201,10 @@ fn tc_coerce_type<'src>(value: &TypeDecl, target: &TypeDecl) -> Result<TypeDecl,
         (Command, Command) => Command,
         (ExitStatus, ExitStatus) => ExitStatus,
         _ => {
-            return Err(TypeCheckError::new(format!(
-                "{:?} cannot be assigned to {:?}",
-                value, target
-            )))
+            return Err(TypeCheckError::new(
+                format!("{:?} cannot be assigned to {:?}", value, target),
+                span,
+            ))
         }
     })
 }
@@ -184,16 +212,19 @@ fn tc_coerce_type<'src>(value: &TypeDecl, target: &TypeDecl) -> Result<TypeDecl,
 fn tc_binary_op<'src>(
     lhs: &Expression<'src>,
     rhs: &Expression<'src>,
-    ctx: &mut Context<'src>,
+    ctx: &mut Context<'src, '_>,
     op: &str,
-) -> Result<TypeDecl, TypeCheckError> {
+) -> Result<TypeDecl, TypeCheckError<'src>> {
     let lhst = tc_expr(lhs, ctx)?;
     let rhst = tc_expr(rhs, ctx)?;
     binary_op_type(&lhst, &rhst, op).map_err(|_| {
-        TypeCheckError::new(format!(
-            "Operation {op} between incompatible type: {:?} and {:?}",
-            lhst, rhst,
-        ))
+        TypeCheckError::new(
+            format!(
+                "Operation {op} between incompatible type: {:?} and {:?}",
+                lhst, rhst,
+            ),
+            lhs.span,
+        )
     })
 }
 
@@ -223,10 +254,10 @@ fn binary_op_type(lhs: &TypeDecl, rhs: &TypeDecl, op: &str) -> Result<TypeDecl, 
 
 fn tc_expr<'src>(
     e: &Expression<'src>,
-    ctx: &mut Context<'src>,
-) -> Result<TypeDecl, TypeCheckError> {
-    use Expression::*;
-    Ok(match &e {
+    ctx: &mut Context<'src, '_>,
+) -> Result<TypeDecl, TypeCheckError<'src>> {
+    use ExprEnum::*;
+    Ok(match &e.expr {
         NumLiteral(_val) => TypeDecl::I64,
         StrLiteral(_val) => TypeDecl::Str,
         ExitStatus(_val) => TypeDecl::ExitStatus,
@@ -248,22 +279,22 @@ fn tc_expr<'src>(
                 }
             }
 
-            return Err(TypeCheckError::new(format!(
-                "[tc expr]Variable {:?} not found in scope",
-                str
-            )));
+            return Err(TypeCheckError::new(
+                format!("[tc expr]Variable {:?} not found in scope", str),
+                e.span,
+            ));
         }
         FnInvoke(str, args) => {
             let args_ty = args
                 .iter()
-                .map(|v| tc_expr(v, ctx))
+                .map(|v| Ok((tc_expr(v, ctx)?, v.span)))
                 .collect::<Result<Vec<_>, _>>()?;
-            let func = ctx
-                .get_fn(*str)
-                .ok_or_else(|| TypeCheckError::new(format!("function {} is not defined", str)))?;
+            let func = ctx.get_fn(**str).ok_or_else(|| {
+                TypeCheckError::new(format!("function {} is not defined", str), *str)
+            })?;
             let args_decl = func.args();
-            for (arg_ty, decl) in args_ty.iter().zip(args_decl.iter()) {
-                tc_coerce_type(&arg_ty, &decl.1)?;
+            for ((arg_ty, arg_span), decl) in args_ty.iter().zip(args_decl.iter()) {
+                tc_coerce_type(&arg_ty, &decl.1, *arg_span)?;
             }
             func.ret_type()
         }
@@ -275,4 +306,11 @@ fn tc_expr<'src>(
             panic!("not implemented")
         }
     })
+}
+
+/// Calculate offset between the start positions of the input spans and return a span between them.
+///
+/// Note: `i` shall start earlier than `r`, otherwise wrapping would occur.
+pub fn calc_offset<'a>(i: Span<'a>, r: Span<'a>) -> Span<'a> {
+    i.take(i.offset(&r))
 }

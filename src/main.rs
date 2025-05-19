@@ -1,13 +1,14 @@
 use core::panic;
 use std::io::Read;
 
-mod evaluator;
+// mod evaluator;
 mod parser;
 mod standard;
 mod type_checker;
 mod types;
 
 use log::{error, info};
+use types::Span;
 
 fn main() {
     env_logger::init();
@@ -16,8 +17,9 @@ fn main() {
     if !std::io::stdin().read_to_string(&mut buf).is_ok() {
         panic!("Failed to read from stdin");
     }
-    let parsed_statements = match parser::statements_finish(&buf) {
-        Ok(parsed_statements) => parsed_statements,
+    let t = Span::new(&buf);
+    let parsed_statements = match parser::statements_finish(t) {
+        Ok(stmts) => stmts,
         Err(e) => {
             error!("Parse error: {e:?}");
             return;
@@ -32,6 +34,7 @@ fn main() {
     }
     info!("Type check OK");
 
+    /*
     let mut frame = evaluator::StackFrame::new();
     let mut lines = vec![];
     lines.push("#!/usr/bin/env bash".to_string());
@@ -41,4 +44,5 @@ fn main() {
     for line in lines {
         println!("{}", line);
     }
+    */
 }

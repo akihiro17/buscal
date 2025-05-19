@@ -1,7 +1,8 @@
-use crate::{
-    evaluator::Functions,
-    types::{FnDef, NativeFn, TypeDecl},
-};
+use std::collections::HashMap;
+
+use crate::types::{FnDef, NativeFn, TypeDecl};
+
+pub type Functions<'src> = HashMap<String, FnDef<'src>>;
 
 pub fn functions<'src>() -> Functions<'src> {
     let mut funcs = Functions::new();

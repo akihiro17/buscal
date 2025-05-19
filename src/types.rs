@@ -1,10 +1,14 @@
+use std::collections::HashMap;
+
+use nom_locate::LocatedSpan;
+
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expression<'src> {
-    Ident(&'src str),
+pub enum ExprEnum<'src> {
+    Ident(Span<'src>),
     NumLiteral(i64),
     StrLiteral(String),
     ExitStatus(u8),
-    FnInvoke(&'src str, Vec<Expression<'src>>),
+    FnInvoke(Span<'src>, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -14,14 +18,37 @@ pub enum Expression<'src> {
     And(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
+pub type Span<'a> = LocatedSpan<&'a str>;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Expression<'a> {
+    pub(crate) expr: ExprEnum<'a>,
+    pub(crate) span: Span<'a>,
+}
+
+impl<'a> Expression<'a> {
+    pub fn new(expr: ExprEnum<'a>, span: Span<'a>) -> Self {
+        Self { expr, span }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement<'src> {
     Expression(Expression<'src>),
-    VarDef(&'src str, TypeDecl, Expression<'src>),
-    VarAssign(&'src str, Expression<'src>),
+    VarDef {
+        span: Span<'src>,
+        name: Span<'src>,
+        td: TypeDecl,
+        ex: Expression<'src>,
+    },
+    VarAssign {
+        span: Span<'src>,
+        name: Span<'src>,
+        ex: Expression<'src>,
+    },
     FnDef {
-        name: &'src str,
-        args: Vec<(&'src str, TypeDecl)>,
+        name: Span<'src>,
+        args: Vec<(Span<'src>, TypeDecl)>,
         ret_type: TypeDecl,
         stmts: Statements<'src>,
     },
@@ -29,12 +56,15 @@ pub enum Statement<'src> {
     ReturnWithStatus(Expression<'src>, Expression<'src>),
     If(Expression<'src>, Statements<'src>, Option<Statements<'src>>),
     For {
-        name: &'src str,
+        span: Span<'src>,
+        name: Span<'src>,
         from: Expression<'src>,
         to: Expression<'src>,
         stmts: Statements<'src>,
     },
 }
+
+pub type Statements<'a> = Vec<Statement<'a>>;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TypeDecl {
@@ -53,8 +83,8 @@ pub enum FnDef<'src> {
 impl<'src> FnDef<'src> {
     pub fn args(&self) -> Vec<(&'src str, TypeDecl)> {
         match self {
-            Self::User(user) => user.args.clone(),
-            Self::Native(native) => return native.args.clone(),
+            Self::User(user) => user.args.iter().map(|arg| (&**arg.0, arg.1)).collect(),
+            Self::Native(code) => code.args.clone(),
         }
     }
 
@@ -67,7 +97,7 @@ impl<'src> FnDef<'src> {
 }
 
 pub struct UserFn<'src> {
-    pub args: Vec<(&'src str, TypeDecl)>,
+    pub args: Vec<(Span<'src>, TypeDecl)>,
     pub ret_type: TypeDecl,
     pub stmts: Statements<'src>,
 }
@@ -76,5 +106,3 @@ pub struct NativeFn<'src> {
     pub args: Vec<(&'src str, TypeDecl)>,
     pub ret_type: TypeDecl,
 }
-
-pub type Statements<'a> = Vec<Statement<'a>>;
