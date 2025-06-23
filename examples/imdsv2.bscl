@@ -1,0 +1,18 @@
+fn retry(cmd: array::<str>) -> str {
+  for i in 1 to 2 {
+    var res: str = "";
+    if capture2(&res, cmd) {
+      return res;
+    }
+
+    sleep(1);
+  }
+
+  fail "fail";
+}
+
+var curl_to_get_token: array::<str> = ["curl", "-m", "2", "-X", "PUT", "http://169.254.169.254/latest/api/token", "-H", "X-aws-ec2-metadata-token-ttl-seconds: 21600"];
+var token: str = retry(curl_to_get_token);
+var curl_to_get_instance_id: array::<str> = ["curl", "-H", format("X-aws-ec2-metadata-token: {}", token), "http://169.254.169.254/latest/meta-data/instance-id/"];
+var instance_id: str = retry(curl_to_get_instance_id);
+echo(instance_id);

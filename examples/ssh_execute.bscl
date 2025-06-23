@@ -1,0 +1,38 @@
+# remote hostにsshしてduを実行する。
+# 結果をsort、head、cutして、その出力を表示する
+
+var ssh_user: str = args(1);
+var ssh_proxy: str = args(2);
+var remote_host: str = args(3);
+
+# コマンドが成功するまで10回繰り返す
+fn ssh_execute(cmd: array::<str>) -> str {
+  var ssh_command: array::<str> = [
+    "ssh",
+    "-J",
+    format("{}@{}", ssh_user, ssh_proxy),
+    "-l",
+    ssh_user,
+    remote_host,
+  ];
+
+  ssh_command = ssh_command + cmd;
+  for i in 1 to 10 {
+    var ret: str = "";
+    if capture2(&ret, ssh_command) {
+      return ret;
+    }
+
+    sleep(3);
+  }
+
+  fail "failed to execute command";
+}
+
+var du: array::<str> = ["du", "-s", "/usr/share/doc/*", "|", "sort", "-nr", "|", "head", "-n", "3", "|", "cut", "-f", "2"];
+var output: str = ssh_execute(du);
+var dirs: array::<str> = [];
+split(dirs, output);
+for i in 0 to len(dirs) - 1 {
+  echo(format("{}: {}", i + 1, dirs[i]));
+}
